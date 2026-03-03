@@ -281,14 +281,47 @@ describe("generateConfigFromUrl", () => {
     expect(project.tracker).toEqual({ plugin: "gitlab" });
   });
 
-  it("omits SCM/tracker for unknown hosts", () => {
+  it("falls back to github for unknown hosts", () => {
     const parsed = parseRepoUrl("https://git.mycompany.com/team/app");
     const config = generateConfigFromUrl({ parsed, repoPath: tmpDir });
 
     const projects = config.projects as Record<string, Record<string, unknown>>;
     const project = projects.app;
-    expect(project.scm).toBeUndefined();
-    expect(project.tracker).toBeUndefined();
+    // Unknown hosts fall back to github (best available plugin)
+    expect(project.scm).toEqual({ plugin: "github" });
+    expect(project.tracker).toEqual({ plugin: "github" });
+  });
+
+  it("sets bitbucket SCM and github tracker for Bitbucket repos", () => {
+    const parsed = parseRepoUrl("https://bitbucket.org/team/app");
+    const config = generateConfigFromUrl({ parsed, repoPath: tmpDir });
+
+    const projects = config.projects as Record<string, Record<string, unknown>>;
+    const project = projects.app;
+    expect(project.scm).toEqual({ plugin: "bitbucket" });
+    // Bitbucket tracker not implemented, falls back to github
+    expect(project.tracker).toEqual({ plugin: "github" });
+  });
+
+  it("does not set postCreate for non-JS projects", () => {
+    writeFileSync(join(tmpDir, "Cargo.toml"), "");
+    const parsed = parseRepoUrl("https://github.com/owner/rust-app");
+    const config = generateConfigFromUrl({ parsed, repoPath: tmpDir });
+
+    const projects = config.projects as Record<string, Record<string, unknown>>;
+    const project = projects["rust-app"];
+    expect(project.postCreate).toBeUndefined();
+  });
+
+  it("sets postCreate for JS projects with npm", () => {
+    writeFileSync(join(tmpDir, "package.json"), "{}");
+    writeFileSync(join(tmpDir, "package-lock.json"), "{}");
+    const parsed = parseRepoUrl("https://github.com/owner/js-app");
+    const config = generateConfigFromUrl({ parsed, repoPath: tmpDir });
+
+    const projects = config.projects as Record<string, Record<string, unknown>>;
+    const project = projects["js-app"];
+    expect(project.postCreate).toEqual(["npm install"]);
   });
 
   it("respects custom port", () => {
@@ -345,6 +378,25 @@ describe("isRepoAlreadyCloned", () => {
       join(tmpDir, ".git", "config"),
       `[remote "origin"]\n\turl = https://github.com/owner/repo\n`,
     );
+    expect(isRepoAlreadyCloned(tmpDir, "https://github.com/owner/repo.git")).toBe(true);
+  });
+
+  it("matches SSH-cloned repo against HTTPS clone URL", () => {
+    mkdirSync(join(tmpDir, ".git"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, ".git", "config"),
+      `[remote "origin"]\n\turl = git@github.com:owner/repo.git\n`,
+    );
+    expect(isRepoAlreadyCloned(tmpDir, "https://github.com/owner/repo.git")).toBe(true);
+  });
+
+  it("matches HTTPS-cloned repo against SSH-derived clone URL", () => {
+    mkdirSync(join(tmpDir, ".git"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, ".git", "config"),
+      `[remote "origin"]\n\turl = https://github.com/owner/repo.git\n`,
+    );
+    // parseRepoUrl("git@github.com:owner/repo.git").cloneUrl produces HTTPS
     expect(isRepoAlreadyCloned(tmpDir, "https://github.com/owner/repo.git")).toBe(true);
   });
 

@@ -196,26 +196,27 @@ export function generateConfigFromUrl(options: GenerateConfigOptions): Record<st
     sessionPrefix: prefix,
   };
 
-  // SCM plugin — infer from URL
-  if (platform !== "unknown") {
-    projectConfig.scm = { plugin: platform };
-  }
+  // SCM plugin — always set explicitly so applyProjectDefaults doesn't override.
+  // For known platforms, use the matching plugin. For unknown hosts, default to github
+  // (best available option since it's the only fully implemented SCM plugin).
+  projectConfig.scm = { plugin: platform !== "unknown" ? platform : "github" };
 
-  // Tracker — default to same platform as SCM (GitHub Issues, GitLab Issues, etc.)
-  if (platform === "github" || platform === "gitlab") {
-    projectConfig.tracker = { plugin: platform };
-  }
+  // Tracker — same platform as SCM for known hosts, github as fallback
+  projectConfig.tracker = {
+    plugin: platform === "github" || platform === "gitlab" ? platform : "github",
+  };
 
-  // Post-create commands based on detected package manager
-  if (projectInfo.packageManager) {
-    const installCmd =
-      projectInfo.packageManager === "pnpm"
-        ? "pnpm install"
-        : projectInfo.packageManager === "yarn"
-          ? "yarn install"
-          : projectInfo.packageManager === "bun"
-            ? "bun install"
-            : "npm install";
+  // Post-create commands based on detected package manager (JS ecosystem only)
+  const JS_PACKAGE_MANAGERS: Record<string, string> = {
+    pnpm: "pnpm install",
+    yarn: "yarn install",
+    bun: "bun install",
+    npm: "npm install",
+  };
+  const installCmd = projectInfo.packageManager
+    ? JS_PACKAGE_MANAGERS[projectInfo.packageManager]
+    : undefined;
+  if (installCmd) {
     projectConfig.postCreate = [installCmd];
   }
 
@@ -252,12 +253,19 @@ export function isRepoAlreadyCloned(dir: string, expectedCloneUrl: string): bool
 
   const gitConfig = readFileSync(configPath, "utf-8");
 
-  // Normalize URLs for comparison (strip .git suffix, trailing slashes)
-  const normalize = (url: string) =>
-    url
-      .replace(/\.git$/, "")
-      .replace(/\/$/, "")
-      .toLowerCase();
+  // Normalize URLs for comparison:
+  // - Convert SSH to HTTPS (git@host:owner/repo → https://host/owner/repo)
+  // - Strip .git suffix and trailing slashes
+  // - Lowercase for case-insensitive match
+  const normalize = (url: string) => {
+    let normalized = url.trim();
+    // Convert SSH format to HTTPS
+    const sshMatch = normalized.match(/^git@([^:]+):(.+)$/);
+    if (sshMatch) {
+      normalized = `https://${sshMatch[1]}/${sshMatch[2]}`;
+    }
+    return normalized.replace(/\.git$/, "").replace(/\/$/, "").toLowerCase();
+  };
 
   const expectedNorm = normalize(expectedCloneUrl);
 

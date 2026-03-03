@@ -33,6 +33,10 @@ import { findWebDir, buildDashboardEnv } from "../lib/web-dir.js";
 import { cleanNextCache } from "../lib/dashboard-rebuild.js";
 import { preflight } from "../lib/preflight.js";
 
+// =============================================================================
+// HELPERS
+// =============================================================================
+
 /**
  * Resolve project from config.
  * If projectArg is provided, use it. If only one project exists, use that.
@@ -72,12 +76,9 @@ function resolveProject(
 }
 
 /**
- * Handle `ao start <url>` — clone repo, generate config, return loaded config + path.
+ * Handle `ao start <url>` — clone repo, generate config, return loaded config.
  */
-async function handleUrlStart(url: string): Promise<{
-  config: OrchestratorConfig;
-  configPath: string;
-}> {
+async function handleUrlStart(url: string): Promise<OrchestratorConfig> {
   const spinner = ora();
 
   // 1. Parse URL
@@ -113,14 +114,12 @@ async function handleUrlStart(url: string): Promise<{
 
   if (existsSync(configPath)) {
     console.log(chalk.green(`  Using existing config: ${configPath}`));
-    const config = loadConfig(configPath);
-    return { config, configPath };
+    return loadConfig(configPath);
   }
 
   if (existsSync(configPathAlt)) {
     console.log(chalk.green(`  Using existing config: ${configPathAlt}`));
-    const config = loadConfig(configPathAlt);
-    return { config, configPath: configPathAlt };
+    return loadConfig(configPathAlt);
   }
 
   // 5. Auto-generate config
@@ -134,9 +133,7 @@ async function handleUrlStart(url: string): Promise<{
   writeFileSync(configPath, yamlContent);
   spinner.succeed(`Config generated: ${configPath}`);
 
-  // Load and validate the generated config
-  const config = loadConfig(configPath);
-  return { config, configPath };
+  return loadConfig(configPath);
 }
 
 /**
@@ -169,6 +166,114 @@ async function startDashboard(
 }
 
 /**
+ * Shared startup logic: launch dashboard + orchestrator session, print summary.
+ * Used by both normal and URL-based start flows.
+ */
+async function runStartup(
+  config: OrchestratorConfig,
+  projectId: string,
+  project: ProjectConfig,
+  opts?: { dashboard?: boolean; orchestrator?: boolean; rebuild?: boolean },
+): Promise<void> {
+  const sessionId = `${project.sessionPrefix}-orchestrator`;
+  const port = config.port ?? 3000;
+
+  console.log(chalk.bold(`\nStarting orchestrator for ${chalk.cyan(project.name)}\n`));
+
+  const spinner = ora();
+  let dashboardProcess: ChildProcess | null = null;
+  let exists = false;
+
+  // Start dashboard (unless --no-dashboard)
+  if (opts?.dashboard !== false) {
+    await preflight.checkPort(port);
+    const webDir = findWebDir();
+    if (!existsSync(resolve(webDir, "package.json"))) {
+      throw new Error("Could not find @composio/ao-web package. Run: pnpm install");
+    }
+    await preflight.checkBuilt(webDir);
+
+    if (opts?.rebuild) {
+      await cleanNextCache(webDir);
+    }
+
+    spinner.start("Starting dashboard");
+    dashboardProcess = await startDashboard(
+      port,
+      webDir,
+      config.configPath,
+      config.terminalPort,
+      config.directTerminalPort,
+    );
+    spinner.succeed(`Dashboard starting on http://localhost:${port}`);
+    console.log(chalk.dim("  (Dashboard will be ready in a few seconds)\n"));
+  }
+
+  // Create orchestrator session (unless --no-orchestrator or already exists)
+  let tmuxTarget = sessionId;
+  if (opts?.orchestrator !== false) {
+    const sm = await getSessionManager(config);
+    const existing = await sm.get(sessionId);
+    exists = existing !== null && existing.status !== "killed";
+
+    if (exists) {
+      if (existing?.runtimeHandle?.id) {
+        tmuxTarget = existing.runtimeHandle.id;
+      }
+      console.log(
+        chalk.yellow(
+          `Orchestrator session "${sessionId}" is already running (skipping creation)`,
+        ),
+      );
+    } else {
+      try {
+        spinner.start("Creating orchestrator session");
+        const systemPrompt = generateOrchestratorPrompt({ config, projectId, project });
+        const session = await sm.spawnOrchestrator({ projectId, systemPrompt });
+        if (session.runtimeHandle?.id) {
+          tmuxTarget = session.runtimeHandle.id;
+        }
+        spinner.succeed("Orchestrator session created");
+      } catch (err) {
+        spinner.fail("Orchestrator setup failed");
+        if (dashboardProcess) {
+          dashboardProcess.kill();
+        }
+        throw new Error(
+          `Failed to setup orchestrator: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
+      }
+    }
+  }
+
+  // Print summary
+  console.log(chalk.bold.green("\n✓ Startup complete\n"));
+
+  if (opts?.dashboard !== false) {
+    console.log(chalk.cyan("Dashboard:"), `http://localhost:${port}`);
+  }
+
+  if (opts?.orchestrator !== false && !exists) {
+    console.log(chalk.cyan("Orchestrator:"), `tmux attach -t ${tmuxTarget}`);
+  } else if (exists) {
+    console.log(chalk.cyan("Orchestrator:"), `already running (${sessionId})`);
+  }
+
+  console.log(chalk.dim(`Config: ${config.configPath}\n`));
+
+  // Keep dashboard process alive if it was started
+  if (dashboardProcess) {
+    dashboardProcess.on("exit", (code) => {
+      if (code !== 0 && code !== null) {
+        console.error(chalk.red(`Dashboard exited with code ${code}`));
+      }
+      process.exit(code ?? 0);
+    });
+  }
+}
+
+/**
  * Stop dashboard server.
  * Uses lsof to find the process listening on the port, then kills it.
  * Best effort — if it fails, just warn the user.
@@ -194,6 +299,10 @@ async function stopDashboard(port: number): Promise<void> {
   }
 }
 
+// =============================================================================
+// COMMAND REGISTRATION
+// =============================================================================
+
 export function registerStart(program: Command): void {
   program
     .command("start [project]")
@@ -214,222 +323,21 @@ export function registerStart(program: Command): void {
       ) => {
         try {
           let config: OrchestratorConfig;
+          let projectId: string;
+          let project: ProjectConfig;
 
           // Detect URL argument — run onboarding flow
           if (projectArg && isRepoUrl(projectArg)) {
             console.log(chalk.bold.cyan("\n  Agent Orchestrator — Quick Start\n"));
-
-            const result = await handleUrlStart(projectArg);
-            config = result.config;
-
-            // For URL mode, don't pass projectArg to resolveProject — use the single project
-            const { projectId, project } = resolveProject(config);
-            const sessionId = `${project.sessionPrefix}-orchestrator`;
-            const port = config.port ?? 3000;
-
-            console.log(
-              chalk.bold(`\nStarting orchestrator for ${chalk.cyan(project.name)}\n`),
-            );
-
-            // Start dashboard (unless --no-dashboard)
-            const spinner = ora();
-            let dashboardProcess: ChildProcess | null = null;
-            let exists = false;
-
-            if (opts?.dashboard !== false) {
-              await preflight.checkPort(port);
-              const webDir = findWebDir();
-              if (!existsSync(resolve(webDir, "package.json"))) {
-                throw new Error("Could not find @composio/ao-web package. Run: pnpm install");
-              }
-              await preflight.checkBuilt(webDir);
-
-              if (opts?.rebuild) {
-                await cleanNextCache(webDir);
-              }
-
-              spinner.start("Starting dashboard");
-              dashboardProcess = await startDashboard(
-                port,
-                webDir,
-                config.configPath,
-                config.terminalPort,
-                config.directTerminalPort,
-              );
-              spinner.succeed(`Dashboard starting on http://localhost:${port}`);
-              console.log(chalk.dim("  (Dashboard will be ready in a few seconds)\n"));
-            }
-
-            // Create orchestrator session (unless --no-orchestrator)
-            let tmuxTarget = sessionId;
-            if (opts?.orchestrator !== false) {
-              const sm = await getSessionManager(config);
-              const existing = await sm.get(sessionId);
-              exists = existing !== null && existing.status !== "killed";
-
-              if (exists) {
-                if (existing?.runtimeHandle?.id) {
-                  tmuxTarget = existing.runtimeHandle.id;
-                }
-                console.log(
-                  chalk.yellow(
-                    `Orchestrator session "${sessionId}" is already running (skipping creation)`,
-                  ),
-                );
-              } else {
-                try {
-                  spinner.start("Creating orchestrator session");
-                  const systemPrompt = generateOrchestratorPrompt({
-                    config,
-                    projectId,
-                    project,
-                  });
-                  const session = await sm.spawnOrchestrator({ projectId, systemPrompt });
-                  if (session.runtimeHandle?.id) {
-                    tmuxTarget = session.runtimeHandle.id;
-                  }
-                  spinner.succeed("Orchestrator session created");
-                } catch (err) {
-                  spinner.fail("Orchestrator setup failed");
-                  if (dashboardProcess) {
-                    dashboardProcess.kill();
-                  }
-                  throw new Error(
-                    `Failed to setup orchestrator: ${err instanceof Error ? err.message : String(err)}`,
-                    { cause: err },
-                  );
-                }
-              }
-            }
-
-            // Print summary
-            console.log(chalk.bold.green("\n✓ Startup complete\n"));
-            if (opts?.dashboard !== false) {
-              console.log(chalk.cyan("Dashboard:"), `http://localhost:${port}`);
-            }
-            if (opts?.orchestrator !== false && !exists) {
-              console.log(chalk.cyan("Orchestrator:"), `tmux attach -t ${tmuxTarget}`);
-            } else if (exists) {
-              console.log(chalk.cyan("Orchestrator:"), `already running (${sessionId})`);
-            }
-            console.log(chalk.dim(`Config: ${config.configPath}\n`));
-
-            if (dashboardProcess) {
-              dashboardProcess.on("exit", (code) => {
-                if (code !== 0 && code !== null) {
-                  console.error(chalk.red(`Dashboard exited with code ${code}`));
-                }
-                process.exit(code ?? 0);
-              });
-            }
-
-            return;
+            config = await handleUrlStart(projectArg);
+            ({ projectId, project } = resolveProject(config));
+          } else {
+            // Normal flow — load existing config
+            config = loadConfig();
+            ({ projectId, project } = resolveProject(config, projectArg));
           }
 
-          // Normal flow — load existing config
-          config = loadConfig();
-          const { projectId, project } = resolveProject(config, projectArg);
-          const sessionId = `${project.sessionPrefix}-orchestrator`;
-          const port = config.port ?? 3000;
-
-          console.log(chalk.bold(`\nStarting orchestrator for ${chalk.cyan(project.name)}\n`));
-
-          // Start dashboard (unless --no-dashboard)
-          const spinner = ora();
-          let dashboardProcess: ChildProcess | null = null;
-          let exists = false; // Track whether orchestrator session already exists
-
-          if (opts?.dashboard !== false) {
-            // Pre-flight: only check port/build when actually starting the dashboard
-            await preflight.checkPort(port);
-            const webDir = findWebDir();
-            if (!existsSync(resolve(webDir, "package.json"))) {
-              throw new Error("Could not find @composio/ao-web package. Run: pnpm install");
-            }
-            await preflight.checkBuilt(webDir);
-
-            if (opts?.rebuild) {
-              await cleanNextCache(webDir);
-            }
-
-            spinner.start("Starting dashboard");
-            dashboardProcess = await startDashboard(
-              port,
-              webDir,
-              config.configPath,
-              config.terminalPort,
-              config.directTerminalPort,
-            );
-            spinner.succeed(`Dashboard starting on http://localhost:${port}`);
-            console.log(chalk.dim("  (Dashboard will be ready in a few seconds)\n"));
-          }
-
-          // Create orchestrator session (unless --no-orchestrator or already exists)
-          let tmuxTarget = sessionId; // For the attach hint — updated to hash-based name after spawn
-          if (opts?.orchestrator !== false) {
-            const sm = await getSessionManager(config);
-
-            // Check if orchestrator session already exists
-            const existing = await sm.get(sessionId);
-            exists = existing !== null && existing.status !== "killed";
-
-            if (exists) {
-              if (existing?.runtimeHandle?.id) {
-                tmuxTarget = existing.runtimeHandle.id;
-              }
-              console.log(
-                chalk.yellow(
-                  `Orchestrator session "${sessionId}" is already running (skipping creation)`,
-                ),
-              );
-            } else {
-              try {
-                spinner.start("Creating orchestrator session");
-                const systemPrompt = generateOrchestratorPrompt({ config, projectId, project });
-
-                const session = await sm.spawnOrchestrator({ projectId, systemPrompt });
-                if (session.runtimeHandle?.id) {
-                  tmuxTarget = session.runtimeHandle.id;
-                }
-                spinner.succeed("Orchestrator session created");
-              } catch (err) {
-                spinner.fail("Orchestrator setup failed");
-                // Cleanup dashboard if orchestrator setup fails
-                if (dashboardProcess) {
-                  dashboardProcess.kill();
-                }
-                throw new Error(
-                  `Failed to setup orchestrator: ${err instanceof Error ? err.message : String(err)}`,
-                  { cause: err },
-                );
-              }
-            }
-          }
-
-          // Print summary based on what was actually started
-          console.log(chalk.bold.green("\n✓ Startup complete\n"));
-
-          if (opts?.dashboard !== false) {
-            console.log(chalk.cyan("Dashboard:"), `http://localhost:${port}`);
-          }
-
-          if (opts?.orchestrator !== false && !exists) {
-            console.log(chalk.cyan("Orchestrator:"), `tmux attach -t ${tmuxTarget}`);
-          } else if (exists) {
-            console.log(chalk.cyan("Orchestrator:"), `already running (${sessionId})`);
-          }
-
-          console.log(chalk.dim(`Config: ${config.configPath}\n`));
-
-          // Keep dashboard process alive if it was started
-          if (dashboardProcess) {
-            dashboardProcess.on("exit", (code) => {
-              if (code !== 0 && code !== null) {
-                console.error(chalk.red(`Dashboard exited with code ${code}`));
-              }
-              process.exit(code ?? 0);
-            });
-          }
+          await runStartup(config, projectId, project, opts);
         } catch (err) {
           if (err instanceof Error) {
             if (err.message.includes("No agent-orchestrator.yaml found")) {
