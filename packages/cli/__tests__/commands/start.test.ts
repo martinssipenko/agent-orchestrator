@@ -15,8 +15,8 @@ import type { SessionManager } from "@composio/ao-core";
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockExec, mockConfigRef, mockSessionManager, mockIsPortAvailable, mockSpawn } = vi.hoisted(
-  () => ({
+const { mockExec, mockConfigRef, mockSessionManager, mockWaitForPortAndOpen, mockSpawn } =
+  vi.hoisted(() => ({
     mockExec: vi.fn(),
     mockConfigRef: { current: null as Record<string, unknown> | null },
     mockSessionManager: {
@@ -28,7 +28,7 @@ const { mockExec, mockConfigRef, mockSessionManager, mockIsPortAvailable, mockSp
       spawnOrchestrator: vi.fn(),
       send: vi.fn(),
     },
-    mockIsPortAvailable: vi.fn().mockResolvedValue(true),
+    mockWaitForPortAndOpen: vi.fn().mockResolvedValue(undefined),
     mockSpawn: vi.fn(),
   }),
 );
@@ -72,7 +72,7 @@ vi.mock("../../src/lib/create-session-manager.js", () => ({
 vi.mock("../../src/lib/web-dir.js", () => ({
   findWebDir: vi.fn().mockReturnValue("/fake/web"),
   buildDashboardEnv: vi.fn().mockResolvedValue({}),
-  isPortAvailable: (...args: unknown[]) => mockIsPortAvailable(...args),
+  waitForPortAndOpen: (...args: unknown[]) => mockWaitForPortAndOpen(...args),
 }));
 
 vi.mock("../../src/lib/dashboard-rebuild.js", () => ({
@@ -132,8 +132,8 @@ beforeEach(() => {
   mockSessionManager.spawnOrchestrator.mockReset();
   mockSessionManager.kill.mockReset();
   mockExec.mockReset();
-  mockIsPortAvailable.mockReset();
-  mockIsPortAvailable.mockResolvedValue(true);
+  mockWaitForPortAndOpen.mockReset();
+  mockWaitForPortAndOpen.mockResolvedValue(undefined);
   mockSpawn.mockClear();
 });
 
@@ -400,15 +400,8 @@ describe("start command — URL argument", () => {
 // ---------------------------------------------------------------------------
 
 describe("start command — browser open waits for port", () => {
-  it("polls isPortAvailable and opens browser when port is listening", async () => {
+  it("calls waitForPortAndOpen with orchestrator URL and AbortSignal", async () => {
     mockConfigRef.current = makeConfig({ "my-app": makeProject() });
-
-    // Simulate: port free on first call, then in-use (server ready)
-    let callCount = 0;
-    mockIsPortAvailable.mockImplementation(async () => {
-      callCount++;
-      return callCount < 2; // first call: free (polling), second call: listening (ready)
-    });
 
     // Mock findWebDir to return tmpDir and create package.json for existsSync
     const { findWebDir } = await import("../../src/lib/web-dir.js");
@@ -420,21 +413,24 @@ describe("start command — browser open waits for port", () => {
 
     await program.parseAsync(["node", "test", "start", "--no-orchestrator"]);
 
-    // Give the fire-and-forget waitForPortAndOpen a moment to complete
-    await new Promise((r) => setTimeout(r, 500));
+    // waitForPortAndOpen should have been called with port, orchestrator URL, and AbortSignal
+    expect(mockWaitForPortAndOpen).toHaveBeenCalledTimes(1);
+    const [port, url, signal] = mockWaitForPortAndOpen.mock.calls[0] as [
+      number,
+      string,
+      AbortSignal,
+    ];
+    expect(port).toBe(3000);
+    expect(url).toContain("/sessions/app-orchestrator");
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
 
-    // isPortAvailable should have been polled (at least once free, then once in-use)
-    expect(mockIsPortAvailable).toHaveBeenCalled();
-    expect(callCount).toBeGreaterThanOrEqual(2);
+  it("skips browser open with --no-dashboard", async () => {
+    mockConfigRef.current = makeConfig({ "my-app": makeProject() });
 
-    // spawn should have been called with "open" and the orchestrator URL
-    const openCalls = mockSpawn.mock.calls.filter(
-      (args: unknown[]) => args[0] === "open",
-    );
-    expect(openCalls.length).toBe(1);
-    expect(openCalls[0][1]).toEqual([
-      expect.stringContaining("/sessions/app-orchestrator"),
-    ]);
+    await program.parseAsync(["node", "test", "start", "--no-dashboard", "--no-orchestrator"]);
+
+    expect(mockWaitForPortAndOpen).not.toHaveBeenCalled();
   });
 });
 

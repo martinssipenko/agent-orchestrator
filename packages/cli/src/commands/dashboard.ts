@@ -4,30 +4,8 @@ import { existsSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig } from "@composio/ao-core";
-import { findWebDir, buildDashboardEnv, isPortAvailable } from "../lib/web-dir.js";
+import { findWebDir, buildDashboardEnv, waitForPortAndOpen } from "../lib/web-dir.js";
 import { cleanNextCache, findRunningDashboardPid, findProcessWebDir, waitForPortFree } from "../lib/dashboard-rebuild.js";
-
-/**
- * Poll until a port is accepting connections, then open a URL in the browser.
- * Respects an AbortSignal so the caller can cancel if the process exits early.
- */
-async function waitForPortAndOpen(
-  port: number,
-  url: string,
-  signal: AbortSignal,
-  timeoutMs = 30_000,
-): Promise<void> {
-  const start = Date.now();
-  while (!signal.aborted && Date.now() - start < timeoutMs) {
-    const free = await isPortAvailable(port);
-    if (!free) {
-      const browser = spawn("open", [url], { stdio: "ignore" });
-      browser.on("error", () => {});
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-}
 
 export function registerDashboard(program: Command): void {
   program

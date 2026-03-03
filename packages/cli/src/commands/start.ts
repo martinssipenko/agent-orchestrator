@@ -29,31 +29,13 @@ import {
 } from "@composio/ao-core";
 import { exec } from "../lib/shell.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
-import { findWebDir, buildDashboardEnv, isPortAvailable } from "../lib/web-dir.js";
+import { findWebDir, buildDashboardEnv, waitForPortAndOpen } from "../lib/web-dir.js";
 import { cleanNextCache } from "../lib/dashboard-rebuild.js";
 import { preflight } from "../lib/preflight.js";
 
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-/**
- * Poll until a port is accepting connections, then open a URL in the browser.
- * Gives up after timeoutMs (default 30s) — browser open is best-effort.
- */
-async function waitForPortAndOpen(port: number, url: string, timeoutMs = 30_000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const free = await isPortAvailable(port);
-    if (!free) {
-      // Port is listening — server is ready
-      const browser = spawn("open", [url], { stdio: "ignore" });
-      browser.on("error", () => {});
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-}
 
 /**
  * Resolve project from config.
@@ -282,15 +264,18 @@ async function runStartup(
 
   // Auto-open browser to orchestrator session page once the server is accepting connections.
   // Polls the port instead of using a fixed delay — deterministic and works regardless of
-  // how long Next.js takes to compile.
+  // how long Next.js takes to compile. AbortController cancels polling on early exit.
+  let openAbort: AbortController | undefined;
   if (opts?.dashboard !== false) {
+    openAbort = new AbortController();
     const orchestratorUrl = `http://localhost:${port}/sessions/${sessionId}`;
-    void waitForPortAndOpen(port, orchestratorUrl);
+    void waitForPortAndOpen(port, orchestratorUrl, openAbort.signal);
   }
 
   // Keep dashboard process alive if it was started
   if (dashboardProcess) {
     dashboardProcess.on("exit", (code) => {
+      if (openAbort) openAbort.abort();
       if (code !== 0 && code !== null) {
         console.error(chalk.red(`Dashboard exited with code ${code}`));
       }
