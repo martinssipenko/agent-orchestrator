@@ -160,6 +160,8 @@ export interface LifecycleManagerDeps {
   config: OrchestratorConfig;
   registry: PluginRegistry;
   sessionManager: SessionManager;
+  /** When set, only poll sessions belonging to this project. */
+  projectId?: string;
 }
 
 /** Track attempt counts for reactions per session. */
@@ -170,7 +172,7 @@ interface ReactionTracker {
 
 /** Create a LifecycleManager instance. */
 export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleManager {
-  const { config, registry, sessionManager } = deps;
+  const { config, registry, sessionManager, projectId: scopedProjectId } = deps;
 
   const states = new Map<SessionId, SessionStatus>();
   const reactionTrackers = new Map<string, ReactionTracker>(); // "sessionId:reactionKey"
@@ -726,7 +728,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
     polling = true;
 
     try {
-      const sessions = await sessionManager.list();
+      const sessions = await sessionManager.list(scopedProjectId);
 
       // Include sessions that are active OR whose status changed from what we last saw
       // (e.g., list() detected a dead runtime and marked it "killed" — we need to

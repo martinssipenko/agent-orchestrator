@@ -585,13 +585,28 @@ describe("start command — browser open waits for port", () => {
     );
   });
 
-  it("skips browser open with --no-dashboard", async () => {
+  it("skips browser open and lifecycle with --no-dashboard --no-orchestrator", async () => {
     mockConfigRef.current = makeConfig({ "my-app": makeProject() });
 
     await program.parseAsync(["node", "test", "start", "--no-dashboard", "--no-orchestrator"]);
 
     expect(mockWaitForPortAndOpen).not.toHaveBeenCalled();
     expect(mockEnsureLifecycleWorker).not.toHaveBeenCalled();
+  });
+
+  it("skips browser open but still starts lifecycle with --no-dashboard alone", async () => {
+    mockConfigRef.current = makeConfig({ "my-app": makeProject() });
+
+    mockSessionManager.get.mockResolvedValue(null);
+    mockSessionManager.spawnOrchestrator.mockResolvedValue({ id: "app-orchestrator" });
+
+    await program.parseAsync(["node", "test", "start", "--no-dashboard"]);
+
+    expect(mockWaitForPortAndOpen).not.toHaveBeenCalled();
+    expect(mockEnsureLifecycleWorker).toHaveBeenCalledWith(
+      expect.objectContaining({ configPath: expect.any(String) }),
+      "my-app",
+    );
   });
 });
 

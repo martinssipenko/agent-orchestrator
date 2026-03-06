@@ -36,7 +36,7 @@ export function registerLifecycleWorker(program: Command): void {
         return;
       }
 
-      const lifecycle = await getLifecycleManager(config);
+      const lifecycle = await getLifecycleManager(config, projectId);
       const intervalMs = parseInterval(opts.intervalMs ?? "30000");
       let shuttingDown = false;
 

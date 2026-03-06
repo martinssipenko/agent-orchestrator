@@ -53,8 +53,9 @@ export async function getSessionManager(config: OrchestratorConfig): Promise<Ses
  */
 export async function getLifecycleManager(
   config: OrchestratorConfig,
+  projectId?: string,
 ): Promise<LifecycleManager> {
   const registry = await getRegistry(config);
   const sessionManager = createSessionManager({ config, registry });
-  return createLifecycleManager({ config, registry, sessionManager });
+  return createLifecycleManager({ config, registry, sessionManager, projectId });
 }
