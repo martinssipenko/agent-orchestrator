@@ -395,6 +395,7 @@ export function SessionDetail({
             startFullscreen={startFullscreen}
             variant={terminalVariant}
             height={terminalHeight}
+            isOpenCodeSession={isOpenCodeSession}
             reloadCommand={isOpenCodeSession ? reloadCommand : undefined}
           />
         </div>

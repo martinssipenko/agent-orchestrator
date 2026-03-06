@@ -19,6 +19,7 @@ interface DirectTerminalProps {
   /** CSS height for the terminal container in normal (non-fullscreen) mode.
    *  Defaults to "max(440px, calc(100vh - 440px))". */
   height?: string;
+  isOpenCodeSession?: boolean;
   reloadCommand?: string;
 }
 
@@ -37,6 +38,7 @@ export function DirectTerminal({
   startFullscreen = false,
   variant = "agent",
   height = "max(440px, calc(100vh - 440px))",
+  isOpenCodeSession = false,
   reloadCommand,
 }: DirectTerminalProps) {
   const router = useRouter();
@@ -54,6 +56,7 @@ export function DirectTerminal({
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [resolvedReloadCommand, setResolvedReloadCommand] = useState<string | null>(null);
 
   // Update URL when fullscreen changes
   useEffect(() => {
@@ -70,13 +73,33 @@ export function DirectTerminal({
   }, [fullscreen, pathname, router, searchParams]);
 
   async function handleReload(): Promise<void> {
-    if (!reloadCommand || reloading) return;
+    if (!isOpenCodeSession || reloading) return;
     setReloading(true);
     try {
+      let commandToSend = resolvedReloadCommand ?? reloadCommand;
+
+      if (!commandToSend) {
+        const remapRes = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/remap`, {
+          method: "POST",
+        });
+        if (!remapRes.ok) {
+          throw new Error(`Failed to remap OpenCode session: ${remapRes.status}`);
+        }
+        const remapData = (await remapRes.json()) as { opencodeSessionId?: unknown };
+        if (
+          typeof remapData.opencodeSessionId !== "string" ||
+          remapData.opencodeSessionId.length === 0
+        ) {
+          throw new Error("Missing OpenCode session id after remap");
+        }
+        commandToSend = `/exit\nopencode --session ${remapData.opencodeSessionId}\n`;
+        setResolvedReloadCommand(commandToSend);
+      }
+
       await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: reloadCommand }),
+        body: JSON.stringify({ message: commandToSend }),
       });
     } finally {
       setReloading(false);
@@ -531,7 +554,7 @@ export function DirectTerminal({
         >
           XDA
         </span>
-        {reloadCommand ? (
+        {isOpenCodeSession ? (
           <button
             onClick={handleReload}
             disabled={reloading}
@@ -571,7 +594,7 @@ export function DirectTerminal({
           onClick={() => setFullscreen(!fullscreen)}
           className={cn(
             "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]",
-            !reloadCommand && "ml-auto",
+            !isOpenCodeSession && "ml-auto",
           )}
         >
           {fullscreen ? (
