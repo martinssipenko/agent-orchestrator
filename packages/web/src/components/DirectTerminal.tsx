@@ -569,7 +569,10 @@ export function DirectTerminal({
         ) : null}
         <button
           onClick={() => setFullscreen(!fullscreen)}
-          className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
+          className={cn(
+            "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]",
+            !reloadCommand && "ml-auto",
+          )}
         >
           {fullscreen ? (
             <>
