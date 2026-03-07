@@ -22,7 +22,7 @@ import {
   NON_RESTORABLE_STATUSES,
   SessionNotRestorableError,
   WorkspaceMissingError,
-  type SessionManager,
+  type OpenCodeSessionManager,
   type Session,
   type SessionId,
   type SessionSpawnConfig,
@@ -260,7 +260,7 @@ export interface SessionManagerDeps {
 }
 
 /** Create a SessionManager instance. */
-export function createSessionManager(deps: SessionManagerDeps): SessionManager {
+export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionManager {
   const { config, registry } = deps;
 
   interface LocatedSession {

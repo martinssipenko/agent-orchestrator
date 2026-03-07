@@ -2309,7 +2309,7 @@ describe("spawnOrchestrator", () => {
       }),
     };
 
-    const configWithOpenCode: OrchestratorConfig = {
+    const configWithDelete: OrchestratorConfig = {
       ...config,
       defaults: { ...config.defaults, agent: "opencode" },
       projects: {
@@ -2317,11 +2317,12 @@ describe("spawnOrchestrator", () => {
         "my-app": {
           ...config.projects["my-app"],
           agent: "opencode",
+          orchestratorSessionStrategy: "delete",
         },
       },
     };
 
-    const sm = createSessionManager({ config: configWithOpenCode, registry: registryWithOpenCode });
+    const sm = createSessionManager({ config: configWithDelete, registry: registryWithOpenCode });
     await sm.spawnOrchestrator({ projectId: "my-app" });
 
     const deleteLog = readFileSync(deleteLogPath, "utf-8");

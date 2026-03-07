@@ -7,5 +7,5 @@ export function normalizeOrchestratorSessionStrategy(
 ): NormalizedOrchestratorSessionStrategy {
   if (strategy === "kill-previous" || strategy === "delete-new") return "delete";
   if (strategy === "ignore-new") return "ignore";
-  return strategy ?? "delete";
+  return strategy ?? "reuse";
 }

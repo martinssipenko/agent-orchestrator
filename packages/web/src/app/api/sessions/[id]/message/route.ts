@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServices } from "@/lib/services";
 import { stripControlChars, validateIdentifier, validateString } from "@/lib/validation";
+import { SessionNotFoundError } from "@composio/ao-core";
 
 const MAX_MESSAGE_LENGTH = 10_000;
 
@@ -50,10 +51,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await sessionManager.send(id, message);
       return NextResponse.json({ success: true });
     } catch (err) {
+      if (err instanceof SessionNotFoundError) {
+        return NextResponse.json({ error: err.message }, { status: 404 });
+      }
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error("Failed to send message:", errorMsg);
-      const status = errorMsg.includes("not found") ? 404 : 500;
-      return NextResponse.json({ error: `Failed to send message: ${errorMsg}` }, { status });
+      return NextResponse.json({ error: `Failed to send message: ${errorMsg}` }, { status: 500 });
     }
   } catch (error) {
     console.error("Failed to send message:", error);

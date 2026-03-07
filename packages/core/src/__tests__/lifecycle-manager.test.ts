@@ -111,9 +111,8 @@ beforeEach(() => {
     kill: vi.fn().mockResolvedValue(undefined),
     cleanup: vi.fn(),
     send: vi.fn().mockResolvedValue(undefined),
-    remap: vi.fn(),
     claimPR: vi.fn(),
-  };
+  } as SessionManager;
 
   config = {
     configPath,

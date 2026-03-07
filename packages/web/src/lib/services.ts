@@ -16,7 +16,7 @@ import {
   createSessionManager,
   type OrchestratorConfig,
   type PluginRegistry,
-  type SessionManager,
+  type OpenCodeSessionManager,
   type SCM,
   type ProjectConfig,
 } from "@composio/ao-core";
@@ -32,7 +32,7 @@ import pluginTrackerLinear from "@composio/ao-plugin-tracker-linear";
 export interface Services {
   config: OrchestratorConfig;
   registry: PluginRegistry;
-  sessionManager: SessionManager;
+  sessionManager: OpenCodeSessionManager;
 }
 
 // Cache in globalThis for Next.js HMR stability
@@ -81,4 +81,3 @@ export function getSCM(registry: PluginRegistry, project: ProjectConfig | undefi
   if (!project?.scm) return null;
   return registry.get<SCM>("scm", project.scm.plugin);
 }
-

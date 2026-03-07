@@ -943,8 +943,11 @@ export interface AgentSpecificConfig {
   permissions?: "skip" | "default";
   model?: string;
   orchestratorModel?: string;
-  opencodeSessionId?: string;
   [key: string]: unknown;
+}
+
+export interface OpenCodeAgentConfig extends AgentSpecificConfig {
+  opencodeSessionId?: string;
 }
 
 // =============================================================================
@@ -1029,6 +1032,11 @@ export interface SessionManager {
   kill(sessionId: SessionId, options?: { purgeOpenCode?: boolean }): Promise<void>;
   cleanup(projectId?: string, options?: { dryRun?: boolean }): Promise<CleanupResult>;
   send(sessionId: SessionId, message: string): Promise<void>;
+}
+
+/** OpenCode-specific session manager with remap capability */
+export interface OpenCodeSessionManager extends SessionManager {
+  /** Remap session to OpenCode session ID, returns the mapped OpenCode session ID */
   remap(sessionId: SessionId, force?: boolean): Promise<string>;
   claimPR(sessionId: SessionId, prRef: string, options?: ClaimPROptions): Promise<ClaimPRResult>;
 }
@@ -1046,6 +1054,11 @@ export interface ClaimPRResult {
   githubAssigned: boolean;
   githubAssignmentError?: string;
   takenOverFrom: SessionId[];
+}
+
+/** Type guard to check if a SessionManager supports OpenCode-specific remap operation */
+export function isOpenCodeSessionManager(sm: SessionManager): sm is OpenCodeSessionManager {
+  return typeof (sm as OpenCodeSessionManager).remap === "function";
 }
 
 export interface CleanupResult {
@@ -1142,5 +1155,13 @@ export class WorkspaceMissingError extends Error {
   ) {
     super(`Workspace missing at ${path}${detail ? `: ${detail}` : ""}`);
     this.name = "WorkspaceMissingError";
+  }
+}
+
+/** Thrown when a session lookup fails (session does not exist). */
+export class SessionNotFoundError extends Error {
+  constructor(public readonly sessionId: string) {
+    super(`Session not found: ${sessionId}`);
+    this.name = "SessionNotFoundError";
   }
 }

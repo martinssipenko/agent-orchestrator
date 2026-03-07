@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { normalizeOrchestratorSessionStrategy } from "../orchestrator-session-strategy.js";
 
 describe("normalizeOrchestratorSessionStrategy", () => {
-  it("defaults to delete when strategy is unset", () => {
-    expect(normalizeOrchestratorSessionStrategy(undefined)).toBe("delete");
+  it("defaults to reuse when strategy is unset", () => {
+    expect(normalizeOrchestratorSessionStrategy(undefined)).toBe("reuse");
   });
 
   it("returns canonical strategies unchanged", () => {
