@@ -190,6 +190,8 @@ async function getCIChecksFromStatusRollup(pr: PRInfo): Promise<CICheck[]> {
       return check;
     })
     .filter((check): check is CICheck => check !== null);
+}
+
 function parseProjectRepo(projectRepo: string): [string, string] {
   const parts = projectRepo.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
