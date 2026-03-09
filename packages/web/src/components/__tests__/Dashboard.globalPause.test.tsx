@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { Dashboard } from "@/components/Dashboard";
-import type { DashboardSession, GlobalPauseState } from "@/lib/types";
+import type { GlobalPauseState } from "@/lib/types";
 import { makeSession } from "@/__tests__/helpers";
 
 describe("Dashboard globalPause banner", () => {
