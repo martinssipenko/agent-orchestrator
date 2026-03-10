@@ -25,10 +25,9 @@ export default async function Home(props: { searchParams: Promise<{ project?: st
   const searchParams = await props.searchParams;
   let sessions: DashboardSession[] = [];
   let orchestratorId: string | null = null;
-  let globalPause: GlobalPauseState | null = null;
-  const defaultProjectId = getPrimaryProjectId();
+  let globalPause: GlobalPauseState | null;
   // Allow ?project=all to show all sessions (for multi-project setups)
-  const projectFilter = searchParams.project ?? defaultProjectId;
+  const projectFilter = searchParams.project ?? getPrimaryProjectId();
 
   try {
     const { config, registry, sessionManager } = await getServices();
