@@ -1084,9 +1084,9 @@ describe("scm-github plugin", () => {
 
   describe("forkSyncUpstream", () => {
     it("returns no-op for up-to-date branch", async () => {
+      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "" }); // fetch
       ghMock.mockResolvedValueOnce({ stdout: "ok\n" }); // rev-parse
-      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "0\t0\n" }); // rev-list
 
       const result = await scm.forkSyncUpstream?.({ workspacePath: "/tmp/repo" });
@@ -1098,12 +1098,19 @@ describe("scm-github plugin", () => {
       });
       expect(result?.stateBefore.relation).toBe("up_to_date");
       expect(result?.stateAfter.relation).toBe("up_to_date");
+      expect(result?.stateBefore.localRef).toBe("feat/my-feature");
+      expect(ghMock).toHaveBeenNthCalledWith(
+        1,
+        "git",
+        ["branch", "--show-current"],
+        expect.objectContaining({ cwd: "/tmp/repo" }),
+      );
     });
 
     it("fast-forwards when strictly behind", async () => {
+      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "" }); // fetch
       ghMock.mockResolvedValueOnce({ stdout: "ok\n" }); // rev-parse
-      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "2\t0\n" }); // rev-list before
       ghMock.mockResolvedValueOnce({ stdout: "" }); // merge --ff-only
       ghMock.mockResolvedValueOnce({ stdout: "0\t0\n" }); // rev-list after
@@ -1117,12 +1124,13 @@ describe("scm-github plugin", () => {
       });
       expect(result?.stateBefore.relation).toBe("behind");
       expect(result?.stateAfter.relation).toBe("up_to_date");
+      expect(result?.stateBefore.localRef).toBe("feat/my-feature");
     });
 
     it("does not attempt merge for diverged branches and returns drift alert", async () => {
+      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "" }); // fetch
       ghMock.mockResolvedValueOnce({ stdout: "ok\n" }); // rev-parse
-      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "4\t3\n" }); // rev-list before
 
       const result = await scm.forkSyncUpstream?.({ workspacePath: "/tmp/repo" });
@@ -1130,6 +1138,7 @@ describe("scm-github plugin", () => {
       expect(result?.action).toBe("blocked");
       expect(result?.synced).toBe(false);
       expect(result?.stateBefore.relation).toBe("diverged");
+      expect(result?.stateBefore.localRef).toBe("feat/my-feature");
       expect(result?.suggestions.some((s) => s.type === "drift_alert")).toBe(true);
       expect(ghMock).not.toHaveBeenCalledWith(
         "git",
@@ -1139,9 +1148,9 @@ describe("scm-github plugin", () => {
     });
 
     it("returns blocked when ff-only merge fails (conflict path)", async () => {
+      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "" }); // fetch
       ghMock.mockResolvedValueOnce({ stdout: "ok\n" }); // rev-parse
-      ghMock.mockResolvedValueOnce({ stdout: "feat/my-feature\n" }); // branch
       ghMock.mockResolvedValueOnce({ stdout: "1\t0\n" }); // rev-list before
       ghMock.mockRejectedValueOnce(new Error("ff-only failed")); // merge --ff-only
 
@@ -1150,6 +1159,7 @@ describe("scm-github plugin", () => {
       expect(result?.action).toBe("blocked");
       expect(result?.synced).toBe(false);
       expect(result?.stateAfter.relation).toBe("behind");
+      expect(result?.stateAfter.localRef).toBe("feat/my-feature");
       expect(result?.suggestions.some((s) => s.type === "sync_upstream")).toBe(true);
     });
   });
