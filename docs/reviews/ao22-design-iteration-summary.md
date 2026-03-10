@@ -12,9 +12,9 @@
      - idempotency/retry semantics,
      - governance hooks per fork-owner policy.
 
-2. `docs/pr-403-feedback-tools-explainer.html`
-   - Refreshed to match the new formal architecture.
-   - Added visual sections mirroring the same six design contracts and the formal pipeline.
+2. `docs/design/feedback-pipeline-explainer.html`
+   - Added a durable architecture explainer page (non-PR-specific).
+   - Mirrors the same six design contracts and the formal pipeline.
 
 ## Intent
 
