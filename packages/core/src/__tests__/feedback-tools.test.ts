@@ -117,6 +117,19 @@ describe("feedback dedupe key", () => {
     expect(keyA).toBe(keyB);
   });
 
+  it("is stable when only confidence changes", () => {
+    const keyA = generateFeedbackDedupeKey(FEEDBACK_TOOL_NAMES.BUG_REPORT, {
+      ...validPayload,
+      confidence: 0.21,
+    });
+    const keyB = generateFeedbackDedupeKey(FEEDBACK_TOOL_NAMES.BUG_REPORT, {
+      ...validPayload,
+      confidence: 0.99,
+    });
+
+    expect(keyA).toBe(keyB);
+  });
+
   it("changes when normalized content differs", () => {
     const keyA = generateFeedbackDedupeKey(FEEDBACK_TOOL_NAMES.BUG_REPORT, validPayload);
     const keyB = generateFeedbackDedupeKey(FEEDBACK_TOOL_NAMES.BUG_REPORT, {

@@ -84,7 +84,6 @@ export function generateFeedbackDedupeKey(
     body: normalizeText(input.body).toLowerCase(),
     session: normalizeText(input.session).toLowerCase(),
     source: normalizeText(input.source).toLowerCase(),
-    confidence: input.confidence.toFixed(4),
     evidence: canonicalEvidence,
   });
 
