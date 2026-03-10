@@ -181,6 +181,13 @@ describe("getLaunchCommand", () => {
     );
   });
 
+  it("keeps the fallback if-block shell-valid on one line", () => {
+    const cmd = agent.getLaunchCommand(makeLaunchConfig());
+
+    expect(cmd).toContain('if [ -z "$SES_ID" ]; then SES_ID=$(opencode session list --format json');
+    expect(cmd).not.toContain("then;");
+  });
+
   it("works with different agent names: oracle", () => {
     const cmd = agent.getLaunchCommand(
       makeLaunchConfig({ subagent: "oracle", prompt: "review code" }),

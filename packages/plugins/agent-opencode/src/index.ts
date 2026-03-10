@@ -187,9 +187,7 @@ function createOpenCodeAgent(): Agent {
         );
         return [
           `SES_ID=$(${runCommand} | node -e ${shellEscape(captureScript)})`,
-          `if [ -z "$SES_ID" ]; then`,
-          `  SES_ID=$(opencode session list --format json | node -e ${shellEscape(fallbackScript)} ${shellEscape(`AO:${config.sessionId}`)})`,
-          "fi",
+          `if [ -z "$SES_ID" ]; then SES_ID=$(opencode session list --format json | node -e ${shellEscape(fallbackScript)} ${shellEscape(`AO:${config.sessionId}`)}); fi`,
           `[ -n "$SES_ID" ] && exec opencode --session "$SES_ID"${sharedOptionsSuffix}; echo ${missingSessionError} >&2; exit 1`,
         ].join("; ");
       }
