@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { createSessionManager } from "../session-manager.js";
-import { writeMetadata, readMetadata, readMetadataRaw, deleteMetadata } from "../metadata.js";
+import {
+  writeMetadata,
+  readMetadata,
+  readMetadataRaw,
+  deleteMetadata,
+  reserveSessionId,
+} from "../metadata.js";
 import { getSessionsDir, getProjectBaseDir, getWorktreesDir } from "../paths.js";
 import {
   SessionNotRestorableError,
@@ -3112,6 +3118,18 @@ describe("spawnOrchestrator", () => {
     const sm = createSessionManager({ config, registry: mockRegistry });
     await expect(sm.spawnOrchestrator({ projectId: "my-app" })).resolves.toBeDefined();
     expect(mockRuntime.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not delete an in-progress reservation file without runtime metadata", async () => {
+    expect(reserveSessionId(sessionsDir, "app-orchestrator")).toBe(true);
+
+    const sm = createSessionManager({ config, registry: mockRegistry });
+
+    await expect(sm.spawnOrchestrator({ projectId: "my-app" })).rejects.toThrow(
+      "already exists but is not in a reusable state",
+    );
+    expect(mockRuntime.create).not.toHaveBeenCalled();
+    expect(readMetadataRaw(sessionsDir, "app-orchestrator")).toEqual({});
   });
 });
 

@@ -1008,14 +1008,18 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
       writeFileSync(systemPromptFile, orchestratorConfig.systemPrompt, "utf-8");
     }
 
-    const existingOrchestrator = await get(sessionId);
+    const existingRaw = readMetadataRaw(sessionsDir, sessionId);
+    const existingOrchestrator = existingRaw?.["runtimeHandle"]
+      ? metadataToSession(sessionId, existingRaw)
+      : null;
     if (existingOrchestrator?.runtimeHandle) {
       const existingAlive = await plugins.runtime
         .isAlive(existingOrchestrator.runtimeHandle)
         .catch(() => false);
       if (existingAlive && orchestratorSessionStrategy === "reuse") {
-        const persisted = await get(sessionId);
-        if (persisted?.runtimeHandle) {
+        const persistedRaw = readMetadataRaw(sessionsDir, sessionId);
+        if (persistedRaw?.["runtimeHandle"]) {
+          const persisted = metadataToSession(sessionId, persistedRaw);
           persisted.metadata["orchestratorSessionReused"] = "true";
           return persisted;
         }
@@ -1042,7 +1046,10 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
     if (!reserved) {
       // Reservation failed - another process reserved it first.
       // Check if the session now exists and is alive.
-      const concurrentSession = await get(sessionId);
+      const concurrentRaw = readMetadataRaw(sessionsDir, sessionId);
+      const concurrentSession = concurrentRaw?.["runtimeHandle"]
+        ? metadataToSession(sessionId, concurrentRaw)
+        : null;
       if (concurrentSession?.runtimeHandle) {
         const concurrentAlive = await plugins.runtime
           .isAlive(concurrentSession.runtimeHandle)
