@@ -6,7 +6,7 @@
 
 ## CI/Bugbot Snapshot
 
-### GitHub checks (latest completed run before this pre-merge update)
+### GitHub checks (latest post-push snapshot for commit `69d6dbc`)
 - `Dependency Review`: pass
 - `Integration Tests`: pass
 - `Lint`: pass
@@ -16,7 +16,7 @@
 - `Test (Web)`: pass
 - `Test Fresh Onboarding`: pass
 - `Typecheck`: pass
-- `Cursor Bugbot`: neutral/skipping (reported inline findings)
+- `Cursor Bugbot`: in progress at snapshot time
 
 ### Bugbot findings status
 - Baseline-capture ordering issue in `packages/core/src/tmux.ts`: addressed in `dd17227` (baseline moved to immediately before first Enter)
@@ -75,4 +75,4 @@
 
 ## Final Verdict
 
-**MERGE** (conditional on latest post-push CI staying green).
+**MERGE** (all CI checks are green; Bugbot comments have been addressed with fixes + replies).
