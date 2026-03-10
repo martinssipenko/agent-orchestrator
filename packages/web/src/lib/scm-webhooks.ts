@@ -1,11 +1,12 @@
-import type {
-  OrchestratorConfig,
-  PluginRegistry,
-  ProjectConfig,
-  SCM,
-  SCMWebhookEvent,
-  SCMWebhookRequest,
-  Session,
+import {
+  TERMINAL_STATUSES,
+  type OrchestratorConfig,
+  type PluginRegistry,
+  type ProjectConfig,
+  type SCM,
+  type SCMWebhookEvent,
+  type SCMWebhookRequest,
+  type Session,
 } from "@composio/ao-core";
 
 export interface WebhookProjectMatch {
@@ -44,7 +45,10 @@ export function findWebhookProjects(
 
 export function eventMatchesProject(event: SCMWebhookEvent, project: ProjectConfig): boolean {
   if (!event.repository) return false;
-  return `${event.repository.owner}/${event.repository.name}` === project.repo;
+  return (
+    `${event.repository.owner}/${event.repository.name}`.toLowerCase() ===
+    project.repo.toLowerCase()
+  );
 }
 
 export function findAffectedSessions(
@@ -54,6 +58,7 @@ export function findAffectedSessions(
 ): Session[] {
   return sessions.filter((session) => {
     if (session.projectId !== projectId) return false;
+    if (TERMINAL_STATUSES.has(session.status)) return false;
     if (event.prNumber !== undefined && session.pr?.number === event.prNumber) return true;
     if (event.branch && session.branch === event.branch) return true;
     return false;
