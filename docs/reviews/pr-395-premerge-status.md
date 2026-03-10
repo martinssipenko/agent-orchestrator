@@ -8,7 +8,7 @@ Issue: #380
 ## 1) CI/Bugbot snapshot
 - PR state: `OPEN`
 - Draft: `false`
-- Mergeability (latest API snapshot): `UNKNOWN` (transient GitHub state while recalculating), previously `MERGEABLE`
+- Mergeability: `MERGEABLE`
 - CI checks:
   - `Dependency Review`: PASS
   - `Integration Tests`: PASS
@@ -19,12 +19,12 @@ Issue: #380
   - `Test (Web)`: PASS
   - `Test Fresh Onboarding`: PASS
   - `Typecheck`: PASS
-- Cursor Bugbot check: `NEUTRAL/skipping` (no failing check status)
+- Cursor Bugbot check: `skipping` after rerun (non-failing)
 
 ## 2) Bugbot comment handling
 - One Bugbot inline comment flagged `docs/reviews/ao20-pr395-final-status.md` as PR-process artifact.
 - Action taken in this sweep: removed that file from the branch and replaced it with this pre-merge status + explainer docs requested in this task.
-- Follow-up: comment on PR with links and explicit acknowledgement.
+- Follow-up completed: outdated review thread was explicitly resolved.
 
 ## 3) Review command / fallback
 - Attempted agent review command:
