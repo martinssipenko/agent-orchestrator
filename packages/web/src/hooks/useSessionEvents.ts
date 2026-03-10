@@ -10,8 +10,7 @@ interface State {
 
 type Action =
   | { type: "reset"; sessions: DashboardSession[]; globalPause: GlobalPauseState | null }
-  | { type: "snapshot"; patches: SSESnapshotEvent["sessions"] }
-  | { type: "updatePause"; globalPause: GlobalPauseState | null };
+  | { type: "snapshot"; patches: SSESnapshotEvent["sessions"] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -40,8 +39,6 @@ function reducer(state: State, action: Action): State {
       });
       return changed ? { ...state, sessions: next } : state;
     }
-    case "updatePause":
-      return { ...state, globalPause: action.globalPause };
   }
 }
 
