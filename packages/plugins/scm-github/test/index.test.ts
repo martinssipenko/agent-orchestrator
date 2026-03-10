@@ -1162,5 +1162,26 @@ describe("scm-github plugin", () => {
       expect(result?.stateAfter.localRef).toBe("feat/my-feature");
       expect(result?.suggestions.some((s) => s.type === "sync_upstream")).toBe(true);
     });
+
+    it("throws when provided localBranch is not the checked out HEAD branch", async () => {
+      ghMock.mockResolvedValueOnce({ stdout: "feat/current\n" }); // branch
+
+      await expect(
+        scm.forkSyncUpstream?.({
+          workspacePath: "/tmp/repo",
+          localBranch: "feat/other",
+        }),
+      ).rejects.toThrow(
+        'fork.sync_upstream localBranch "feat/other" is not checked out (current: "feat/current")',
+      );
+
+      expect(ghMock).toHaveBeenCalledTimes(1);
+      expect(ghMock).toHaveBeenNthCalledWith(
+        1,
+        "git",
+        ["branch", "--show-current"],
+        expect.objectContaining({ cwd: "/tmp/repo" }),
+      );
+    });
   });
 });

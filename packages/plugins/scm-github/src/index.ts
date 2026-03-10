@@ -846,8 +846,13 @@ function createGitHubSCM(): SCM {
     async forkSyncUpstream(input: ForkSyncInput): Promise<ForkSyncResult> {
       const upstreamRemote = input.upstreamRemote ?? "upstream";
       const upstreamBranch = input.upstreamBranch ?? "main";
-      const localBranch =
-        input.localBranch ?? (await git(["branch", "--show-current"], input.workspacePath));
+      const currentBranch = await git(["branch", "--show-current"], input.workspacePath);
+      const localBranch = input.localBranch ?? currentBranch;
+      if (input.localBranch && input.localBranch !== currentBranch) {
+        throw new Error(
+          `fork.sync_upstream localBranch "${input.localBranch}" is not checked out (current: "${currentBranch}")`,
+        );
+      }
       const upstreamRef = `${upstreamRemote}/${upstreamBranch}`;
       const localRef = localBranch;
 
