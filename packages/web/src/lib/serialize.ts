@@ -8,6 +8,7 @@
 import {
   SESSION_STATUS,
   TERMINAL_STATUSES,
+  readMetadata,
   updateMetadata,
   type Session,
   type Agent,
@@ -36,6 +37,7 @@ import {
 
 /** Cache for issue titles (5 min TTL — issue titles rarely change) */
 const issueTitleCache = new TTLCache<string>(300_000);
+const VALID_SESSION_STATUSES = new Set(Object.values(SESSION_STATUS));
 
 /** Resolve which project a session belongs to. */
 export function resolveProject(
@@ -331,8 +333,18 @@ function maybeWriteSessionStatusTransition(
 ): void {
   if (!dashboard.pr || !metadata) return;
 
-  const nextStatus = deriveSessionStatusTransition(metadata.currentStatus, dashboard.pr, rateLimited);
-  if (!nextStatus || nextStatus === metadata.currentStatus) return;
+  let currentStatus = metadata.currentStatus;
+  try {
+    const diskStatus = readMetadata(metadata.sessionsDir, metadata.sessionId)?.status;
+    if (diskStatus && VALID_SESSION_STATUSES.has(diskStatus as SessionStatus)) {
+      currentStatus = diskStatus as SessionStatus;
+    }
+  } catch {
+    // Best effort read; fall back to request-time status.
+  }
+
+  const nextStatus = deriveSessionStatusTransition(currentStatus, dashboard.pr, rateLimited);
+  if (!nextStatus || nextStatus === currentStatus) return;
 
   try {
     updateMetadata(metadata.sessionsDir, metadata.sessionId, { status: nextStatus });
