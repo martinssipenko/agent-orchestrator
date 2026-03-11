@@ -1140,6 +1140,32 @@ describe("list", () => {
     expect(sessions.map((s) => s.id).sort()).toEqual(["app-1", "app-2"]);
   });
 
+  it("preserves lastActivityAt when read-time repair rewrites metadata", async () => {
+    writeMetadata(sessionsDir, "app-orchestrator", {
+      worktree: config.projects["my-app"]!.path,
+      branch: "main",
+      status: "merged",
+      project: "my-app",
+      pr: "https://github.com/org/my-app/pull/42",
+      runtimeHandle: JSON.stringify(makeHandle("rt-orch")),
+    });
+
+    const oldTime = new Date("2026-01-01T00:00:00.000Z");
+    utimesSync(join(sessionsDir, "app-orchestrator"), oldTime, oldTime);
+
+    const sm = createSessionManager({ config, registry: mockRegistry });
+    const sessions = await sm.list("my-app");
+    const orchestrator = sessions.find((session) => session.id === "app-orchestrator");
+
+    expect(orchestrator).toBeDefined();
+    expect(orchestrator!.lastActivityAt.getTime()).toBe(oldTime.getTime());
+
+    const repaired = readMetadataRaw(sessionsDir, "app-orchestrator");
+    expect(repaired!["pr"]).toBeUndefined();
+    expect(repaired!["prAutoDetect"]).toBe("off");
+    expect(repaired!["status"]).toBe("working");
+  });
+
   it("filters by project ID", async () => {
     // In hash-based architecture, each project has its own directory
     // so filtering is implicit. This test verifies list(projectId) only

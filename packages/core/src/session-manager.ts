@@ -11,7 +11,7 @@
  * Reference: scripts/claude-ao-session, scripts/send-to-session
  */
 
-import { statSync, existsSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { statSync, existsSync, readdirSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -361,6 +361,68 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
     return next;
   }
 
+  function updateMetadataPreservingMtime(
+    sessionsDir: string,
+    sessionName: string,
+    updates: Partial<Record<string, string>>,
+    modifiedAt?: Date,
+  ): void {
+    const metaPath = join(sessionsDir, sessionName);
+    let preservedMtime = modifiedAt;
+    if (!preservedMtime) {
+      try {
+        preservedMtime = statSync(metaPath).mtime;
+      } catch {
+        preservedMtime = undefined;
+      }
+    }
+
+    updateMetadata(sessionsDir, sessionName, updates);
+
+    if (!preservedMtime) return;
+    try {
+      utimesSync(metaPath, preservedMtime, preservedMtime);
+    } catch {
+      void 0;
+    }
+  }
+
+  function repairSingleSessionMetadataOnRead(
+    sessionsDir: string,
+    record: ActiveSessionRecord,
+  ): ActiveSessionRecord {
+    const repaired = { ...record, raw: { ...record.raw } };
+    if (!isOrchestratorSessionRecord(repaired.sessionName, repaired.raw)) {
+      return repaired;
+    }
+
+    const updates: Partial<Record<string, string>> = {};
+    if (repaired.raw["role"] !== "orchestrator") {
+      updates["role"] = "orchestrator";
+    }
+    if (repaired.raw["pr"]) {
+      updates["pr"] = "";
+    }
+    if (repaired.raw["prAutoDetect"] !== "off") {
+      updates["prAutoDetect"] = "off";
+    }
+    if (STALE_PR_OWNERSHIP_STATUSES.has(repaired.raw["status"] ?? "")) {
+      updates["status"] = "working";
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateMetadataPreservingMtime(
+        sessionsDir,
+        repaired.sessionName,
+        updates,
+        repaired.modifiedAt,
+      );
+      repaired.raw = applyMetadataUpdatesToRaw(repaired.raw, updates);
+    }
+
+    return repaired;
+  }
+
   function sessionMetadataTimestamp(record: ActiveSessionRecord): number {
     const metadataTimestamp = Date.parse(record.raw["restoredAt"] ?? record.raw["createdAt"] ?? "");
     if (record.modifiedAt) return record.modifiedAt.getTime();
@@ -392,7 +454,12 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
         }
 
         if (Object.keys(updates).length > 0) {
-          updateMetadata(sessionsDir, record.sessionName, updates);
+          updateMetadataPreservingMtime(
+            sessionsDir,
+            record.sessionName,
+            updates,
+            record.modifiedAt,
+          );
           record.raw = applyMetadataUpdatesToRaw(record.raw, updates);
         }
         continue;
@@ -429,7 +496,7 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
           prAutoDetect: "off",
           ...(PR_TRACKING_STATUSES.has(record.raw["status"] ?? "") ? { status: "working" } : {}),
         };
-        updateMetadata(sessionsDir, record.sessionName, updates);
+        updateMetadataPreservingMtime(sessionsDir, record.sessionName, updates, record.modifiedAt);
         record.raw = applyMetadataUpdatesToRaw(record.raw, updates);
       }
     }
@@ -665,11 +732,23 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
   function findSessionRecord(sessionId: SessionId): LocatedSession | null {
     for (const [projectId, project] of Object.entries(config.projects)) {
       const sessionsDir = getProjectSessionsDir(project);
-      const raw = loadActiveSessionRecords(project).find(
-        (record) => record.sessionName === sessionId,
-      )?.raw;
+      const raw = readMetadataRaw(sessionsDir, sessionId);
       if (!raw) continue;
-      return { raw, sessionsDir, project, projectId };
+
+      let modifiedAt: Date | undefined;
+      try {
+        modifiedAt = statSync(join(sessionsDir, sessionId)).mtime;
+      } catch {
+        modifiedAt = undefined;
+      }
+
+      const repaired = repairSingleSessionMetadataOnRead(sessionsDir, {
+        sessionName: sessionId,
+        raw,
+        modifiedAt,
+      });
+
+      return { raw: repaired.raw, sessionsDir, project, projectId };
     }
 
     return null;
@@ -1401,9 +1480,7 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
     // Try to find the session in any project's sessions directory
     for (const project of Object.values(config.projects)) {
       const sessionsDir = getProjectSessionsDir(project);
-      const raw = loadActiveSessionRecords(project).find(
-        (record) => record.sessionName === sessionId,
-      )?.raw;
+      const raw = readMetadataRaw(sessionsDir, sessionId);
       if (!raw) continue;
 
       // Get file timestamps for createdAt/lastActivityAt
@@ -1418,9 +1495,15 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
         // If stat fails, timestamps will fall back to current time
       }
 
-      const session = metadataToSession(sessionId, raw, createdAt, modifiedAt);
+      const repaired = repairSingleSessionMetadataOnRead(sessionsDir, {
+        sessionName: sessionId,
+        raw,
+        modifiedAt,
+      });
 
-      const selectedAgentName = raw["agent"];
+      const session = metadataToSession(sessionId, repaired.raw, createdAt, modifiedAt);
+
+      const selectedAgentName = repaired.raw["agent"];
       const effectiveAgentName = selectedAgentName ?? project.agent ?? config.defaults.agent;
       const plugins = resolvePlugins(project, effectiveAgentName);
       await ensureHandleAndEnrich(
@@ -1904,7 +1987,6 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
     );
 
     for (const { sessionName, raw: otherRaw } of activeRecords) {
-      if (sessionName === sessionId) continue;
       if (!otherRaw || isOrchestratorSessionRecord(sessionName, otherRaw)) continue;
 
       const samePr = otherRaw["pr"] === pr.url;
