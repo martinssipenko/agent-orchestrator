@@ -11,13 +11,6 @@ describe("Dashboard globalPause banner", () => {
     close: () => void;
   };
 
-  const defaultStats = {
-    totalSessions: 1,
-    workingSessions: 1,
-    openPRs: 0,
-    needsReview: 0,
-  };
-
   const makeGlobalPause = (overrides: Partial<GlobalPauseState> = {}): GlobalPauseState => ({
     pausedUntil: new Date(Date.now() + 3600000).toISOString(),
     reason: "Model rate limit reached",
@@ -43,13 +36,7 @@ describe("Dashboard globalPause banner", () => {
     const sessions = [makeSession()];
     const globalPause = makeGlobalPause();
 
-    render(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={globalPause}
-      />,
-    );
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={globalPause} />);
 
     expect(screen.getByText(/Orchestrator paused:/)).toBeInTheDocument();
     expect(screen.getByText(/Model rate limit reached/)).toBeInTheDocument();
@@ -58,7 +45,7 @@ describe("Dashboard globalPause banner", () => {
   it("hides banner when initialGlobalPause is null", () => {
     const sessions = [makeSession()];
 
-    render(<Dashboard initialSessions={sessions} stats={defaultStats} initialGlobalPause={null} />);
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={null} />);
 
     expect(screen.queryByText(/Orchestrator paused:/)).not.toBeInTheDocument();
   });
@@ -67,13 +54,7 @@ describe("Dashboard globalPause banner", () => {
     const sessions = [makeSession()];
     const globalPause = makeGlobalPause({ reason: "Custom provider limit exceeded" });
 
-    render(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={globalPause}
-      />,
-    );
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={globalPause} />);
 
     expect(screen.getByText(/Custom provider limit exceeded/)).toBeInTheDocument();
   });
@@ -82,13 +63,7 @@ describe("Dashboard globalPause banner", () => {
     const sessions = [makeSession()];
     const globalPause = makeGlobalPause({ pausedUntil: "2026-03-10T12:30:00.000Z" });
 
-    render(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={globalPause}
-      />,
-    );
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={globalPause} />);
 
     expect(screen.getByText(/Resume after/)).toBeInTheDocument();
   });
@@ -97,13 +72,7 @@ describe("Dashboard globalPause banner", () => {
     const sessions = [makeSession()];
     const globalPause = makeGlobalPause({ sourceSessionId: "my-worker-42" });
 
-    render(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={globalPause}
-      />,
-    );
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={globalPause} />);
 
     expect(screen.getByText(/Source: my-worker-42/)).toBeInTheDocument();
   });
@@ -119,7 +88,7 @@ describe("Dashboard globalPause banner", () => {
       }),
     } as Response);
 
-    render(<Dashboard initialSessions={sessions} stats={defaultStats} initialGlobalPause={null} />);
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={null} />);
 
     expect(screen.queryByText(/Orchestrator paused:/)).not.toBeInTheDocument();
 
@@ -165,13 +134,7 @@ describe("Dashboard globalPause banner", () => {
       }),
     } as Response);
 
-    render(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={globalPause}
-      />,
-    );
+    render(<Dashboard initialSessions={sessions} initialGlobalPause={globalPause} />);
 
     expect(screen.getByText(/Orchestrator paused:/)).toBeInTheDocument();
 
@@ -216,7 +179,7 @@ describe("Dashboard globalPause banner", () => {
     });
 
     const { rerender } = render(
-      <Dashboard initialSessions={sessions} stats={defaultStats} initialGlobalPause={firstPause} />,
+      <Dashboard initialSessions={sessions} initialGlobalPause={firstPause} />,
     );
 
     expect(screen.getByText(/First pause/)).toBeInTheDocument();
@@ -227,13 +190,7 @@ describe("Dashboard globalPause banner", () => {
     });
     expect(screen.queryByText(/Orchestrator paused:/)).not.toBeInTheDocument();
 
-    rerender(
-      <Dashboard
-        initialSessions={sessions}
-        stats={defaultStats}
-        initialGlobalPause={secondPause}
-      />,
-    );
+    rerender(<Dashboard initialSessions={sessions} initialGlobalPause={secondPause} />);
 
     expect(screen.getByText(/Second pause/)).toBeInTheDocument();
   });
