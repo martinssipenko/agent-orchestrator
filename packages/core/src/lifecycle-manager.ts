@@ -524,9 +524,6 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
     // --- Pending (human) review comments ---
     // null = SCM fetch failed; skip processing to preserve existing metadata.
-    if (pendingComments === null) {
-      void 0;
-    }
     if (pendingComments !== null) {
       const pendingFingerprint = makeFingerprint(pendingComments.map((comment) => comment.id));
       const lastPendingFingerprint = session.metadata["lastPendingReviewFingerprint"] ?? "";
@@ -588,9 +585,6 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
     }
 
     // --- Automated (bot) review comments ---
-    if (automatedComments === null) {
-      void 0;
-    }
     if (automatedComments !== null) {
       const automatedFingerprint = makeFingerprint(automatedComments.map((comment) => comment.id));
       const lastAutomatedFingerprint = session.metadata["lastAutomatedReviewFingerprint"] ?? "";
@@ -820,26 +814,25 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         });
       }
     } catch (err) {
-      if (scopedProjectId) {
-        observer.recordOperation({
-          metric: "lifecycle_poll",
-          operation: "lifecycle.poll",
-          outcome: "failure",
-          correlationId,
-          projectId: scopedProjectId,
-          durationMs: Date.now() - startedAt,
-          reason: err instanceof Error ? err.message : String(err),
-          level: "error",
-        });
-        observer.setHealth({
-          surface: "lifecycle.worker",
-          status: "error",
-          projectId: scopedProjectId,
-          correlationId,
-          reason: err instanceof Error ? err.message : String(err),
-          details: { projectId: scopedProjectId },
-        });
-      }
+      const errorReason = err instanceof Error ? err.message : String(err);
+      observer.recordOperation({
+        metric: "lifecycle_poll",
+        operation: "lifecycle.poll",
+        outcome: "failure",
+        correlationId,
+        projectId: scopedProjectId,
+        durationMs: Date.now() - startedAt,
+        reason: errorReason,
+        level: "error",
+      });
+      observer.setHealth({
+        surface: "lifecycle.worker",
+        status: "error",
+        projectId: scopedProjectId,
+        correlationId,
+        reason: errorReason,
+        details: scopedProjectId ? { projectId: scopedProjectId } : { projectScope: "all" },
+      });
     } finally {
       polling = false;
     }
