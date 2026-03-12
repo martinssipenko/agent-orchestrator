@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { createSessionManager } from "../session-manager.js";
+import { validateConfig } from "../config.js";
 import {
   writeMetadata,
   readMetadata,
@@ -3326,8 +3327,10 @@ describe("spawnOrchestrator", () => {
       },
     };
 
+    const validatedConfig = validateConfig(configWithSharedPermissions);
+    validatedConfig.configPath = config.configPath;
     const sm = createSessionManager({
-      config: configWithSharedPermissions,
+      config: validatedConfig,
       registry: mockRegistry,
     });
     await sm.spawn({ projectId: "my-app" });

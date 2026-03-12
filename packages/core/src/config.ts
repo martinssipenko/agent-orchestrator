@@ -107,9 +107,8 @@ const AgentSpecificConfigSchema = z
 const RoleAgentSpecificConfigSchema = z
   .object({
     permissions: z
-      .enum(["permissionless", "default", "auto-edit", "suggest", "skip"])
-      .optional()
-      .transform((value) => (value === "skip" ? "permissionless" : value)),
+      .union([z.enum(["permissionless", "default", "auto-edit", "suggest"]), z.literal("skip")])
+      .optional(),
     model: z.string().optional(),
     orchestratorModel: z.string().optional(),
     opencodeSessionId: z.string().optional(),

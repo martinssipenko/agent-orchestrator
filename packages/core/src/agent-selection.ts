@@ -50,8 +50,12 @@ export function resolveAgentSelection(params: {
 
   const agentConfig: AgentSpecificConfig = {
     ...sharedConfig,
-    ...roleAgentConfig,
   };
+  for (const [key, value] of Object.entries(roleAgentConfig)) {
+    if (value !== undefined) {
+      agentConfig[key] = value;
+    }
+  }
 
   const model =
     role === "orchestrator"

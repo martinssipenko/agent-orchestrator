@@ -1751,7 +1751,8 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
       );
     }
 
-    const selectedAgent = resolveSelectionForSession(project, sessionId, raw).agentName;
+    const selection = resolveSelectionForSession(project, sessionId, raw);
+    const selectedAgent = selection.agentName;
     if (selectedAgent === "opencode" && !asValidOpenCodeSessionId(raw["opencodeSessionId"])) {
       const discovered = await discoverOpenCodeSessionIdByTitle(
         sessionId,
@@ -2048,7 +2049,8 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
   async function remap(sessionId: SessionId, force = false): Promise<string> {
     const { raw, sessionsDir, project } = requireSessionRecord(sessionId);
 
-    const selectedAgent = resolveSelectionForSession(project, sessionId, raw).agentName;
+    const selection = resolveSelectionForSession(project, sessionId, raw);
+    const selectedAgent = selection.agentName;
     if (selectedAgent !== "opencode") {
       throw new Error(`Session ${sessionId} is not using the opencode agent`);
     }
@@ -2105,7 +2107,8 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
       throw new SessionNotFoundError(sessionId);
     }
 
-    const selectedAgent = resolveSelectionForSession(project, sessionId, raw).agentName;
+    const selection = resolveSelectionForSession(project, sessionId, raw);
+    const selectedAgent = selection.agentName;
     if (selectedAgent === "opencode" && !asValidOpenCodeSessionId(raw["opencodeSessionId"])) {
       const discovered = await discoverOpenCodeSessionIdByTitle(
         sessionId,
@@ -2125,7 +2128,6 @@ export function createSessionManager(deps: SessionManagerDeps): OpenCodeSessionM
     //    session (status "working", agent exited) would not be detected as terminal
     //    and isRestorable would reject it.
     const session = metadataToSession(sessionId, raw, projectId);
-    const selection = resolveSelectionForSession(project, sessionId, raw);
     const plugins = resolvePlugins(project, selection.agentName);
     await enrichSessionWithRuntimeState(session, plugins, true);
 
