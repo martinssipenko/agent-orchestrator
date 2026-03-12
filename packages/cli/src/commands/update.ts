@@ -10,6 +10,11 @@ export function registerUpdate(program: Command): void {
     .option("--skip-smoke", "Skip smoke tests after rebuilding")
     .option("--smoke-only", "Run smoke tests without fetching or rebuilding")
     .action(async (opts: { skipSmoke?: boolean; smokeOnly?: boolean }) => {
+      if (opts.skipSmoke && opts.smokeOnly) {
+        console.error("`ao update` does not allow `--skip-smoke` together with `--smoke-only`.");
+        process.exit(1);
+      }
+
       const args: string[] = [];
       if (opts.skipSmoke) {
         args.push("--skip-smoke");

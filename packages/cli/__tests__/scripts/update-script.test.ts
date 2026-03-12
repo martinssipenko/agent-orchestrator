@@ -164,4 +164,63 @@ exit 0`,
     expect(result.stderr).toContain("Working tree is dirty");
     expect(result.stderr).toContain("commit or stash");
   });
+
+  it("rejects conflicting smoke flags in the script", () => {
+    const result = spawnSync("bash", [scriptPath, "--skip-smoke", "--smoke-only"], {
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Conflicting options");
+  });
+
+  it("reports when the update itself dirties the checkout", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "ao-update-post-dirty-"));
+    const fakeRepo = join(tempRoot, "repo");
+    mkdirSync(join(fakeRepo, "packages", "cli"), { recursive: true });
+
+    const binDir = join(tempRoot, "bin");
+    mkdirSync(binDir, { recursive: true });
+
+    createFakeBinary(
+      binDir,
+      "git",
+      `case "$*" in
+  "rev-parse --is-inside-work-tree") printf "true\\n" ;;
+  "status --porcelain")
+    if [ -f ${JSON.stringify(join(tempRoot, "post-dirty"))} ]; then
+      printf " M pnpm-lock.yaml\\n"
+    fi
+    ;;
+  "branch --show-current") printf "main\\n" ;;
+  "pull --ff-only origin main") touch ${JSON.stringify(join(tempRoot, "post-dirty"))} ;;
+esac
+exit 0`,
+    );
+    createFakeBinary(
+      binDir,
+      "pnpm",
+      'if [ "$1" = "--version" ]; then printf "9.15.4\\n"; fi\nexit 0',
+    );
+    createFakeBinary(binDir, "npm", "exit 0");
+    createFakeBinary(
+      binDir,
+      "node",
+      'if [ "$1" = "--version" ]; then printf "v20.11.1\\n"; fi\nexit 0',
+    );
+
+    const result = spawnSync("bash", [scriptPath, "--skip-smoke"], {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH || ""}`,
+        AO_REPO_ROOT: fakeRepo,
+      },
+      encoding: "utf8",
+    });
+
+    rmSync(tempRoot, { recursive: true, force: true });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Update modified tracked files");
+  });
 });

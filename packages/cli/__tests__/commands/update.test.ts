@@ -20,6 +20,10 @@ describe("update command", () => {
     registerUpdate(program);
     mockExecuteScriptCommand.mockReset();
     mockExecuteScriptCommand.mockResolvedValue(undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
   });
 
   afterEach(() => {
@@ -32,12 +36,20 @@ describe("update command", () => {
     expect(mockExecuteScriptCommand).toHaveBeenCalledWith("ao-update.sh", []);
   });
 
-  it("passes through smoke flags", async () => {
-    await program.parseAsync(["node", "test", "update", "--skip-smoke", "--smoke-only"]);
+  it("passes through --skip-smoke", async () => {
+    await program.parseAsync(["node", "test", "update", "--skip-smoke"]);
 
-    expect(mockExecuteScriptCommand).toHaveBeenCalledWith("ao-update.sh", [
-      "--skip-smoke",
-      "--smoke-only",
-    ]);
+    expect(mockExecuteScriptCommand).toHaveBeenCalledWith("ao-update.sh", ["--skip-smoke"]);
+  });
+
+  it("rejects conflicting smoke flags", async () => {
+    await expect(
+      program.parseAsync(["node", "test", "update", "--skip-smoke", "--smoke-only"]),
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(mockExecuteScriptCommand).not.toHaveBeenCalled();
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith(
+      "`ao update` does not allow `--skip-smoke` together with `--smoke-only`.",
+    );
   });
 });

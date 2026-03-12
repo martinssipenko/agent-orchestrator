@@ -35,6 +35,11 @@ EOF
   shift
 done
 
+if [ "$SKIP_SMOKE" = true ] && [ "$SMOKE_ONLY" = true ]; then
+  printf 'Conflicting options: use either --skip-smoke or --smoke-only, not both.\n' >&2
+  exit 1
+fi
+
 REPO_ROOT="${AO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 require_command() {
@@ -53,21 +58,17 @@ run_cmd() {
 
 run_smoke_tests() {
   printf '\nRunning smoke tests...\n'
-  if [ -n "${AO_UPDATE_SMOKE_COMMANDS:-}" ]; then
-    bash -lc "$AO_UPDATE_SMOKE_COMMANDS"
-    return
-  fi
-
   run_cmd node "$REPO_ROOT/packages/agent-orchestrator/bin/ao.js" --version
   run_cmd node "$REPO_ROOT/packages/agent-orchestrator/bin/ao.js" doctor --help
   run_cmd node "$REPO_ROOT/packages/agent-orchestrator/bin/ao.js" update --help
 }
 
 ensure_repo_clean() {
+  local reason="$1"
   local status_output
   status_output="$(git status --porcelain)"
   if [ -n "$status_output" ]; then
-    printf 'Working tree is dirty. Fix: commit or stash local changes before running ao update.\n' >&2
+    printf '%s\n' "$reason" >&2
     exit 1
   fi
 }
@@ -98,7 +99,7 @@ if [ "$SMOKE_ONLY" = false ]; then
     exit 1
   fi
 
-  ensure_repo_clean
+  ensure_repo_clean "Working tree is dirty. Fix: commit or stash local changes before running ao update."
   ensure_on_target_branch
 
   run_cmd git fetch origin "$TARGET_BRANCH"
@@ -119,7 +120,7 @@ if [ "$SMOKE_ONLY" = false ]; then
     run_cmd npm link
   )
 
-  ensure_repo_clean
+  ensure_repo_clean "Update modified tracked files. Inspect git status, review the changes, and rerun after restoring a clean checkout if needed."
 fi
 
 if [ "$SKIP_SMOKE" = false ]; then
