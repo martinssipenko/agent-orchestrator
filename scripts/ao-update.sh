@@ -85,13 +85,14 @@ ensure_on_target_branch() {
 printf 'Agent Orchestrator Update\n\n'
 
 require_command node "install Node.js 20+"
-require_command git "install git 2.25+"
-require_command pnpm "enable corepack or run npm install -g pnpm"
-require_command npm "install npm with Node.js"
 
 cd "$REPO_ROOT"
 
 if [ "$SMOKE_ONLY" = false ]; then
+  require_command git "install git 2.25+"
+  require_command pnpm "enable corepack or run npm install -g pnpm"
+  require_command npm "install npm with Node.js"
+
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     printf 'The update command must run inside the Agent Orchestrator git checkout.\n' >&2
     exit 1
@@ -117,6 +118,8 @@ if [ "$SMOKE_ONLY" = false ]; then
     cd "$REPO_ROOT/packages/cli"
     run_cmd npm link
   )
+
+  ensure_repo_clean
 fi
 
 if [ "$SKIP_SMOKE" = false ]; then

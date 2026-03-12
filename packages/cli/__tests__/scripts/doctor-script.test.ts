@@ -1,10 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = "/home/harsh/.worktrees/agent-orchestrator/ao-69";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const scriptPath = join(repoRoot, "scripts", "ao-doctor.sh");
 
 function writeExecutable(path: string, content: string): void {
@@ -129,6 +139,8 @@ describe("scripts/ao-doctor.sh", () => {
     mkdirSync(tmpRoot, { recursive: true });
     const staleFile = join(tmpRoot, "ao-stale.tmp");
     writeFileSync(staleFile, "stale\n");
+    const oldTimestamp = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(staleFile, oldTimestamp, oldTimestamp);
 
     const result = spawnSync("bash", [scriptPath, "--fix"], {
       env: {
@@ -142,6 +154,9 @@ describe("scripts/ao-doctor.sh", () => {
     });
 
     const npmCommands = readFileSync(npmLog, "utf8");
+    const staleStillExists = existsSync(staleFile);
+    const dataDirExists = existsSync(dataDir);
+    const worktreeDirExists = existsSync(worktreeDir);
     rmSync(tempRoot, { recursive: true, force: true });
 
     expect(result.status).toBe(0);
@@ -149,5 +164,8 @@ describe("scripts/ao-doctor.sh", () => {
     expect(npmCommands).toContain("link");
     expect(result.stdout).toContain("launcher");
     expect(result.stdout).toContain("stale temp files");
+    expect(staleStillExists).toBe(false);
+    expect(dataDirExists).toBe(true);
+    expect(worktreeDirExists).toBe(true);
   });
 });

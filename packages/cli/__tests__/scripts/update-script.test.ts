@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = "/home/harsh/.worktrees/agent-orchestrator/ao-69";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const scriptPath = join(repoRoot, "scripts", "ao-update.sh");
 
 function writeExecutable(path: string, content: string): void {
@@ -86,27 +87,6 @@ esac\nexit 0`,
     const binDir = join(tempRoot, "bin");
     mkdirSync(binDir, { recursive: true });
     const commandLog = join(tempRoot, "commands.log");
-
-    createFakeBinary(
-      binDir,
-      "git",
-      `if [ "$*" = "--version" ]; then printf 'git version 2.43.0\\n'; fi
-printf 'git %s\\n' "$*" >> ${JSON.stringify(commandLog)}
-exit 0`,
-    );
-    createFakeBinary(
-      binDir,
-      "pnpm",
-      `if [ "$1" = "--version" ]; then printf '9.15.4\\n'; fi
-printf 'pnpm %s\\n' "$*" >> ${JSON.stringify(commandLog)}
-exit 0`,
-    );
-    createFakeBinary(
-      binDir,
-      "npm",
-      `printf 'npm %s\\n' "$*" >> ${JSON.stringify(commandLog)}
-exit 0`,
-    );
     createFakeBinary(
       binDir,
       "node",

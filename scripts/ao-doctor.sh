@@ -102,7 +102,7 @@ read_config_value() {
   local key="$1"
   local file="$2"
   local value
-  value="$(grep -E "^[[:space:]]*${key}:" "$file" | cut -d: -f2- | tr -d '"' | xargs 2>/dev/null || true)"
+  value="$(grep -E "^[[:space:]]*${key}:" "$file" | head -n 1 | cut -d: -f2- | tr -d '"' | xargs 2>/dev/null || true)"
   printf '%s' "$value"
 }
 
@@ -116,9 +116,12 @@ ensure_dir() {
   fi
 
   if [ "$FIX_MODE" = true ]; then
-    mkdir -p "$dir_path"
-    fixed "$label created at $dir_path"
-    return 0
+    if mkdir -p "$dir_path"; then
+      fixed "$label created at $dir_path"
+      return 0
+    fi
+    fail "$label could not be created at $dir_path. Fix: $fix_hint"
+    return 1
   fi
 
   warn "$label is missing at $dir_path. Fix: $fix_hint"
@@ -192,12 +195,11 @@ check_launcher() {
   fi
 
   if [ "$FIX_MODE" = true ] && command -v npm >/dev/null 2>&1 && [ -d "$REPO_ROOT/packages/cli" ]; then
-    (cd "$REPO_ROOT/packages/cli" && npm link >/dev/null 2>&1)
-    if command -v ao >/dev/null 2>&1; then
+    if (cd "$REPO_ROOT/packages/cli" && npm link >/dev/null 2>&1) && command -v ao >/dev/null 2>&1; then
       fixed "ao launcher refreshed with npm link"
       return
     fi
-    fixed "ao launcher refresh attempted with npm link"
+    warn "ao launcher refresh failed. Fix: cd $REPO_ROOT/packages/cli && npm link"
     return
   fi
 
@@ -288,26 +290,30 @@ check_config_dirs() {
 }
 
 check_stale_temp_files() {
-  local temp_root stale_count
-  temp_root="${AO_DOCTOR_TMP_ROOT:-${TMPDIR:-/tmp}}"
+  local temp_root stale_count deleted_count
+  temp_root="${AO_DOCTOR_TMP_ROOT:-${TMPDIR:-/tmp}/agent-orchestrator}"
   if [ ! -d "$temp_root" ]; then
     pass "temp root exists check skipped because $temp_root does not exist"
     return
   fi
 
-  stale_count="$(find "$temp_root" -maxdepth 2 -type f \( -name 'ao-*.tmp' -o -name 'ao-*.pid' -o -name 'ao-*.lock' \) | wc -l | tr -d ' ')"
+  stale_count="$(find "$temp_root" -maxdepth 1 -type f -mmin +60 \( -name 'ao-*.tmp' -o -name 'ao-*.pid' -o -name 'ao-*.lock' \) | wc -l | tr -d ' ')"
   if [ "$stale_count" = "0" ]; then
     pass "no stale temp files were detected under $temp_root"
     return
   fi
 
   if [ "$FIX_MODE" = true ]; then
-    find "$temp_root" -maxdepth 2 -type f \( -name 'ao-*.tmp' -o -name 'ao-*.pid' -o -name 'ao-*.lock' \) -delete
-    fixed "$stale_count stale temp files removed from $temp_root"
+    deleted_count="$(find "$temp_root" -maxdepth 1 -type f -mmin +60 \( -name 'ao-*.tmp' -o -name 'ao-*.pid' -o -name 'ao-*.lock' \) -delete -print | wc -l | tr -d ' ')"
+    if [ "$deleted_count" = "$stale_count" ]; then
+      fixed "$deleted_count stale temp files removed from $temp_root"
+      return
+    fi
+    warn "Only removed $deleted_count of $stale_count stale temp files from $temp_root. Fix: inspect that directory manually"
     return
   fi
 
-  warn "$stale_count stale temp files found under $temp_root. Fix: rerun ao doctor --fix"
+  warn "$stale_count stale temp files older than 60 minutes found under $temp_root. Fix: rerun ao doctor --fix"
 }
 
 printf 'Agent Orchestrator Doctor\n\n'
